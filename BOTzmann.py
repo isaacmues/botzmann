@@ -2,8 +2,70 @@ import os
 import discord
 import time
 import datetime
+import numpy as np
+import matplotlib.pyplot as plt
+import scipy.constants as cts
 from dotenv import load_dotenv
 from discord.ext import tasks
+from PIL import Image
+
+# Command keys
+# =========================================================================
+
+tex_cmd = "tex>"
+bot_cmd = "bot>"
+cts_cmd = "cts>"
+
+# Configuration for rendering latex
+# =========================================================================
+
+plt.rcParams.update({
+    "text.usetex": True,
+    "font.family": "sans-serif",
+    "font.sans-serif": ["Helvetica"],
+    "font.size": 20})
+
+plt.style.use('dark_background')
+
+
+def latex_render(message):
+
+    output_file = "reply.png"
+
+    fig,ax = plt.subplots(figsize=(3, 2), dpi=300)
+    ax.text(0, 0, message.replace(tex_cmd+" ", ""), va="center", ha="center")
+    ax.set_xlim(-4,4)
+    ax.set_ylim(-1,1)
+    ax.axis("off")
+    plt.savefig(output_file, transparent=True)
+
+    padding = 20.0
+    padding = np.asarray([-1, -1, 1, 1]) * padding
+
+    with Image.open(output_file) as im:
+	
+        imageBox = im.getbbox()
+        imageBox = tuple(np.asarray(imageBox) + padding)
+        cropped  = im.crop(imageBox)
+        cropped.save(output_file)
+
+#=========================================================================
+
+
+def find_constant(message):
+
+    constants = cts.find(message.replace(cts_cmd+" ", ""))
+    
+    if constants != []:
+
+        table = ["{}\t{} {}".format(c, cts.value(c), cts.unit(c)) for c in constants]
+        table = "\n".join(table)
+        return table
+
+    else:
+
+        return "No hubo resultados"
+
 
 botzmann = discord.Client()
 
@@ -15,11 +77,6 @@ announcements_channel_id = int(os.getenv("ANNOUNCEMENTS_CHANNEL_ID"))
 class_channel_id = int(os.getenv("CLASS_CHANNEL_ID"))
 testing_channel_id = int(os.getenv("TESTING_CHANNEL_ID"))
 
-# Command keys
-tex_cmd = "tex>"
-python_cmd = "python>"
-bot_cmd = "bot>"
-fortune_cmd = "fortune>"
 
 # Schedule
 class_days = ["Mon", "Wed", "Fri"]
@@ -36,21 +93,6 @@ if False:
     end_hour = end_hour.strftime("%H:%M")
 
 
-dont_delete = ["BOTzmann.py", "main.tex", "reply.png", "holidays.txt", ".env", ".git", "README.md", ".gitignore"]
-
-
-def latex_render(message):
-
-    text = message.replace(tex_cmd, "").strip()
-
-    with open("message.tex", "w") as message:
-        message.write(text)
-
-    os.system("pdflatex main.tex")
-    os.system("convert -density 800 main.pdf -quality 100 -negate reply.png")
-    file_list = os.listdir()
-    [os.remove(file) for file in file_list if not (file in dont_delete)]
-
 
 def pass_to_python(message):
 
@@ -58,11 +100,6 @@ def pass_to_python(message):
     results = os.popen("python -c " + script).read()
     results = discord.utils.escape_markdown(results)
     return results
-
-
-def get_fortune():
-
-    return discord.utils.escape_markdown(os.popen("fortune").read())
 
 
 def is_not_holiday():
@@ -90,11 +127,10 @@ def is_class_ending(class_days, end_hour):
     return (today in class_days) and (now == end_hour) and is_not_holiday()
 
 
-def botzmann_do(message):
-
     instructions = message.replace(bot_cmd, "")
 
 
+"""
 @tasks.loop(minutes=1)
 async def check_schedule():
 
@@ -120,6 +156,7 @@ async def check_schedule():
 
         [await member.remove_roles(nerd_role) for member in members_list]
         await class_channel.purge(limit=None)
+"""
 
 
 @botzmann.event
@@ -190,16 +227,11 @@ async def on_message(message):
                 author_name + ", no pude compilar tu mensaje. Vúelvelo a intentar"
             )
 
-    elif message.content.startswith(python_cmd):
+    elif message.content.startswith(cts_cmd):
 
-        # TODO better the quotes in print
+        print("Looking for contants with scipy")
 
-        results = pass_to_python(message.content)
-        await origin.send("**" + author_name + "** Python:\n" + results)
-
-    elif message.content.startswith(fortune_cmd):
-
-        await origin.send(get_fortune())
+        await origin.send(find_constant(message.content))
 
     # TODO add a few more commands
     elif message.content.startswith("bot> purge!") and message.author == admin:
