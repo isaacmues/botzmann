@@ -8,6 +8,8 @@ import scipy.constants as cts
 from dotenv import load_dotenv
 from discord.ext import tasks
 from PIL import Image
+from io import StringIO
+from contextlib import redirect_stdout
 
 # Command keys
 # =========================================================================
@@ -15,6 +17,7 @@ from PIL import Image
 tex_cmd = "tex>"
 bot_cmd = "bot>"
 cts_cmd = "cts>"
+ptn_cmd = "python>"
 
 # Configuration for rendering latex
 # =========================================================================
@@ -67,6 +70,16 @@ def find_constant(message):
         return "No hubo resultados"
 
 
+def pass_to_python(message):
+
+    output = StringIO()
+
+    with redirect_stdout(output):
+    
+        exec(message.replace(ptn_cmd, ""), {})
+
+    return output.getvalue()
+
 botzmann = discord.Client()
 
 load_dotenv()
@@ -91,15 +104,6 @@ if False:
     end_hour = start_hour + datetime.timedelta(minutes=2)
     start_hour = start_hour.strftime("%H:%M")
     end_hour = end_hour.strftime("%H:%M")
-
-
-
-def pass_to_python(message):
-
-    script = '"' + message.replace(python_cmd, "").strip() + '"'
-    results = os.popen("python -c " + script).read()
-    results = discord.utils.escape_markdown(results)
-    return results
 
 
 def is_not_holiday():
@@ -232,6 +236,10 @@ async def on_message(message):
         print("Looking for contants with scipy")
 
         await origin.send(find_constant(message.content))
+
+    elif message.content.startswith(ptn_cmd):
+
+        await origin.send(pass_to_python(message.content))
 
     # TODO add a few more commands
     elif message.content.startswith("bot> purge!") and message.author == admin:
